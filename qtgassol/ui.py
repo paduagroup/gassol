@@ -1,6 +1,7 @@
 from PyQt5 import QtGui, QtCore, QtWidgets
 from datetime import datetime
 import time
+import numpy as np
 import pyqtgraph as pg
 
 
@@ -23,12 +24,16 @@ class MainUI(QtWidgets.QMainWindow):
         self.inp_file = QtWidgets.QLineEdit(output)
         self.btn_start = QtWidgets.QPushButton('Start')
         self.btn_pause = QtWidgets.QPushButton('Pause')
-        self.label = QtWidgets.QLabel('Interval (s)')
-        self.input = QtWidgets.QLineEdit(str(interval))
-        self.button = QtWidgets.QPushButton('Update interval')
+        self.lab_interval = QtWidgets.QLabel('Interval (s)')
+        self.inp_interval = QtWidgets.QLineEdit(str(interval))
+        self.btn_interval = QtWidgets.QPushButton('Update interval')
         self.text = QtWidgets.QTextEdit()
         self.text.setText('%15s %12s %12s' % ('Time', 'T(C)', 'P(mPa)'))
 
+        self.text_t = QtWidgets.QLineEdit()
+        self.text_p = QtWidgets.QLineEdit()
+
+        # plots
         self.plt_widget = pg.GraphicsLayoutWidget()
         self.plt1 = self.plt_widget.addPlot()
         self.plt1.setLabel('left', 'T / C')
@@ -40,24 +45,33 @@ class MainUI(QtWidgets.QMainWindow):
         self.curve1 = self.plt1.plot()
         self.curve2 = self.plt2.plot()
 
+        # select region in plot
+        self._init_timestamp = time.time()
+        self.region = pg.LinearRegionItem([self._init_timestamp, self._init_timestamp + 10],
+                                          movable=False, span=[0.0, 0.2], swapMode='block')
+        self.plt1.addItem(self.region)
+
         # layout
-        self.layout = QtWidgets.QGridLayout()
+        self.layout = QtWidgets.QHBoxLayout()
+        self.l_left = QtWidgets.QVBoxLayout()
+        self.layout.addLayout(self.l_left)
+        self.layout.addWidget(self.plt_widget)
+
+        self.l_left.addWidget(self.lab_file)
+        self.l_left.addWidget(self.inp_file)
+        self.l_left.addWidget(self.btn_start)
+        self.l_left.addWidget(self.btn_pause)
+        self.l_left.addWidget(self.lab_interval)
+        self.l_left.addWidget(self.inp_interval)
+        self.l_left.addWidget(self.btn_interval)
+        self.l_left.addWidget(self.text, stretch=True)
+        self.l_left.addWidget(self.text_t)
+        self.l_left.addWidget(self.text_p)
+
         self.widget.setLayout(self.layout)
 
-        self.layout.addWidget(self.lab_file, 0, 0)
-        self.layout.addWidget(self.inp_file, 0, 1)
-        self.layout.addWidget(self.btn_start, 0, 2)
-        self.layout.addWidget(self.btn_pause, 0, 3)
-        self.layout.addWidget(self.label, 1, 0)
-        self.layout.addWidget(self.input, 1, 1)
-        self.layout.addWidget(self.button, 2, 0, 1, 2)
-        self.layout.addWidget(self.text, 3, 0, 1, 2)
-        self.layout.addWidget(self.plt_widget, 1, 2, 3, 2)
-
         # listeners
-        self.btn_start.clicked.connect(self.start)
-        self.btn_pause.clicked.connect(self.pause)
-        self.button.clicked.connect(self.set_interval)
+        self._add_listeners()
 
         # data
         self.time_list = []
@@ -71,14 +85,17 @@ class MainUI(QtWidgets.QMainWindow):
         self._output = output
         self._is_running = False
 
-    def get_data(self):
-        t = self.temp.read()
-        p = self.pres.read()
-        return t, p
+    def _add_listeners(self):
+        self.btn_start.clicked.connect(self.start)
+        self.btn_pause.clicked.connect(self.pause)
+        self.btn_interval.clicked.connect(self.set_interval)
+        self.region.sigRegionChangeFinished.connect(self.average)
+        self.plt1.sigXRangeChanged.connect(self.sync_range)
 
     def run_timer(self):
         timestamp = time.time()
-        t, p = self.get_data()
+        t = self.temp.read()
+        p = self.pres.read()
         string = '%-15s %-12.3f %-12.3f' % (datetime.fromtimestamp(timestamp).strftime('%dT%H:%M:%S'), t, p)
         self.text.append(string)
 
@@ -90,9 +107,41 @@ class MainUI(QtWidgets.QMainWindow):
         self.curve1.setData(self.time_list, self.t_list)
         self.curve2.setData(self.time_list, self.p_list)
 
+        self.region.setBounds([self._init_timestamp, timestamp])
+        self.region.setMovable(True)
+
+    def sync_range(self):
+        self.plt2.blockSignals(True)
+        self.plt2.setRange(xRange=self.plt1.getAxis('bottom').range)
+        self.plt2.blockSignals(False)
+
+    def average(self):
+        '''
+        calculate the average under selected region
+        '''
+        bound = self.region.getRegion()
+        t_l = []
+        p_l = []
+        for i, (time, t, p) in enumerate(zip(self.time_list, self.t_list, self.p_list)):
+            if time > bound[0] and time < bound[1]:
+                t_l.append(t)
+                p_l.append(p)
+        if len(t_l) > 0:
+            t_ave = np.mean(t_l)
+            t_std = np.std(t_l)
+        else:
+            t_ave = t_std = 0
+        if len(p_l) > 0:
+            p_ave = np.mean(p_l)
+            p_std = np.std(p_l)
+        else:
+            p_ave = p_std = 0
+        self.text_t.setText('T: %f +- %f' % (t_ave, t_std))
+        self.text_p.setText('P: %f += %f' % (p_ave, p_std))
+
     def set_interval(self):
         try:
-            interval = float(self.input.text())
+            interval = float(self.inp_interval.text())
         except ValueError:
             return False
         else:

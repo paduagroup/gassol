@@ -1,29 +1,18 @@
-#!/usr/bin/env python3
-
 from PyQt5 import QtGui, QtCore, QtWidgets
-import sys
 from datetime import datetime
 import time
-import numpy as np
 import pyqtgraph as pg
-
-from gsplot import dummyT, dummyP
-
-temp = dummyT('')
-pres = dummyP('')
-
-
-def get_data():
-    t = temp.read()
-    p = pres.read()
-    return t, p
 
 
 class MainUI(QtWidgets.QMainWindow):
-    def __init__(self, output, interval):
+    def __init__(self, temp, pres, output, interval):
         super().__init__()
         self.setWindowTitle('GasSol')
         self.setMinimumSize(1000, 1000)
+
+        # devices
+        self.temp = temp
+        self.pres = pres
 
         # top-level widget
         self.widget = QtWidgets.QWidget()
@@ -82,9 +71,14 @@ class MainUI(QtWidgets.QMainWindow):
         self._output = output
         self._is_running = False
 
+    def get_data(self):
+        t = self.temp.read()
+        p = self.pres.read()
+        return t, p
+
     def run_timer(self):
         timestamp = time.time()
-        t, p = get_data()
+        t, p = self.get_data()
         string = '%-15s %-12.3f %-12.3f' % (datetime.fromtimestamp(timestamp).strftime('%dT%H:%M:%S'), t, p)
         self.text.append(string)
 
@@ -138,14 +132,3 @@ class MainUI(QtWidgets.QMainWindow):
         '''
         self.pause()
         event.accept()
-
-
-def main():
-    app = QtWidgets.QApplication(sys.argv)
-    ui = MainUI('output.txt', 1.0)
-    ui.show()
-    sys.exit(app.exec_())
-
-
-if __name__ == '__main__':
-    main()

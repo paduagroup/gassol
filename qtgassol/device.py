@@ -3,7 +3,7 @@ import numpy as np
 from datetime import datetime
 
 
-class device(object):
+class Device(object):
     '''A device'''
 
     def __init__(self, name=None, port=None):
@@ -12,17 +12,18 @@ class device(object):
             self.port = None
         else:
             self.port = serial.Serial(port, 9600, timeout=1.0)
-        self.err = False
 
     def __str__(self):
         return (self.name + ': ' + str(self.port))
 
     def read(self):
-        val = 0.0
-        return val
+        '''
+        Return -1 if there is error
+        '''
+        return -1
 
 
-class therm(device):
+class Thermometer(Device):
     '''Thermometer'''
 
     def __init__(self, port):
@@ -31,26 +32,23 @@ class therm(device):
         self.port.write(b'T\r')
 
     def read(self):
-        self.err = False
-
         self.port.write(b'T\r')
         self.port.reset_input_buffer()
         buf = self.port.read(15)
 
-        datastr = str(buf).strip('b\'')
+        datastr = buf.decode()
         if len(datastr):
             datastr = datastr.split()[1]
             try:
-                float(datastr)
                 val = float(datastr)
-            except ValueError:
-                self.err = True
-        else:
-            self.err = True
-        return val
+                return val
+            except:
+                pass
+
+        return -1
 
 
-class press(device):
+class Manometer(Device):
     '''Pressure transducer'''
 
     def __init__(self, port):
@@ -63,40 +61,63 @@ class press(device):
         self.port.write(b'x*A,1.0\r')  # send value every 1.0 s
 
     def read(self):
-        self.err = False
-
         self.port.write(b'-*G\r')
         self.port.reset_input_buffer()
         buf = self.port.read(12)
 
-        datastr = str(buf).strip('b\'')
+        datastr = buf.decode()
         if len(datastr):
             datastr = datastr.split()[0]
             try:
                 val = float(datastr)
-            except ValueError:
-                self.err = True
-        else:
-            self.err = True
-        return val
+                return val
+            except:
+                pass
+
+        return -1
 
 
-class dummyT(device):
-
+class DummyT(Device):
     def __init__(self):
-        super().__init__('dummy T')
+        super().__init__('Dummy T')
 
     def read(self):
         return 25.0 + np.random.random_sample() - 0.5
 
 
-class dummyP(device):
-
+class DummyP(Device):
     def __init__(self):
-        super().__init__('dummy P')
+        super().__init__('Dummy P')
         self.t0 = datetime.now().timestamp()
 
     def read(self):
         delt = datetime.now().timestamp() - self.t0
         tau = 60.0
         return (1013.0 * 2.718 ** (- delt / tau) + 50.0 * np.random.random_sample() - 25.0)
+
+
+class DummyFile(Device):
+    '''
+    Read data from file. For debug only.
+    '''
+
+    def __init__(self, filename, column):
+        super().__init__('File')
+        with open(filename) as f:
+            self.lines = f.read().splitlines()
+
+        self._current_line = 0
+        self.column = column
+
+    def read(self):
+        if self._current_line >= len(self.lines):
+            return -1
+
+        while True:
+            line = self.lines[self._current_line]
+            self._current_line += 1
+            if line.startswith('#'):
+                continue
+
+            words = line.strip().split()
+            return float(words[self.column])

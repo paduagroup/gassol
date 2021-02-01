@@ -34,13 +34,13 @@ class Thermometer(Device):
     def read(self):
         self.port.write(b'T\r')
         self.port.reset_input_buffer()
-        buf = self.port.read(15)
+        buf = self.port.read(16)
+        print(buf)
 
         datastr = buf.decode()
         if len(datastr):
-            datastr = datastr.split(':')[1]
             try:
-                val = float(datastr)
+                val = float(datastr.split(':')[1].strip().split()[0])
                 return val
             except:
                 pass
@@ -63,13 +63,13 @@ class Manometer(Device):
     def read(self):
         self.port.write(b'-*G\r')
         self.port.reset_input_buffer()
-        buf = self.port.read(12)
+        buf = self.port.read(13)
+        print(buf)
 
         datastr = buf.decode()
         if len(datastr):
-            datastr = datastr.split()[0]
             try:
-                val = float(datastr)
+                val = float(datastr.split()[0])
                 return val
             except:
                 pass

@@ -38,7 +38,7 @@ class Thermometer(Device):
 
         datastr = buf.decode()
         if len(datastr):
-            datastr = datastr.split()[1]
+            datastr = datastr.split(':')[1]
             try:
                 val = float(datastr)
                 return val

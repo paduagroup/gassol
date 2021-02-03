@@ -9,10 +9,8 @@ class Device(object):
 
     def __init__(self, name=None, port=None):
         self.name = name or 'Device'
-        if port is None:
-            self.port = None
-        else:
-            self.port = serial.Serial(port, 9600, timeout=1.0)
+        # TODO timeout of 1s may not be reasonable
+        self.port = serial.Serial(port, 9600, timeout=1.0)
 
     def __str__(self):
         return ('%s : %s' % (self.name, self.port))
@@ -21,7 +19,7 @@ class Device(object):
         '''
         Return -1 if there is error
         '''
-        return -1
+        raise NotImplementedError('This method should be implemented by inheritors')
 
 
 class Thermometer(Device):
@@ -31,6 +29,11 @@ class Thermometer(Device):
         super().__init__('Thermometer', port)
 
     def read(self):
+        '''
+        TODO
+        use in_waiting to check the available data in buffer
+        read it until data are completely transmitted
+        '''
         self.port.write(b'T\r')
         self.port.reset_input_buffer()
         buf = self.port.read(16)
@@ -48,6 +51,23 @@ class Thermometer(Device):
             return -1
         else:
             return val
+
+    @staticmethod
+    def detect():
+        devices = [p.device for p in serial.tools.list_ports.comports()]
+        for d in devices:
+            if not d.startswith('/dev/ttyUSB'):
+                continue
+
+            try:
+                dev = Thermometer(d)
+            except:
+                continue
+
+            if dev.read() != -1:
+                return dev
+
+        return None
 
 
 class Manometer(Device):
@@ -81,6 +101,23 @@ class Manometer(Device):
         else:
             return val
 
+    @staticmethod
+    def detect():
+        devices = [p.device for p in serial.tools.list_ports.comports()]
+        for d in devices:
+            if not d.startswith('/dev/ttyUSB'):
+                continue
+
+            try:
+                dev = Manometer(d)
+            except:
+                continue
+
+            if dev.read() != -1:
+                return dev
+
+        return None
+
 
 class DummyT(Device):
     def __init__(self):
@@ -107,7 +144,7 @@ class DummyFile(Device):
     '''
 
     def __init__(self, filename, column):
-        super().__init__('File')
+        super().__init__('Dummy File')
         with open(filename) as f:
             self.lines = f.read().splitlines()
 
@@ -126,39 +163,3 @@ class DummyFile(Device):
 
             words = line.strip().split()
             return float(words[self.column])
-
-
-class DeviceDetector():
-    '''
-    Detect USB device for thermometer and manometer.
-    '''
-
-    @staticmethod
-    def detect_thermometer():
-        devices = [p.device for p in serial.tools.list_ports.comports()]
-        for d in devices:
-            if not d.startswith('/dev/ttyUSB'):
-                continue
-
-            dev = serial.Serial(d, 9600, timeout=1.0)
-            dev.write(b'T\r')
-            buf = dev.read(16)
-            if buf.decode().strip().endswith('C'):
-                return Thermometer(d)
-
-        return None
-
-    @staticmethod
-    def detect_manometer():
-        devices = [p.device for p in serial.tools.list_ports.comports()]
-        for d in devices:
-            if not d.startswith('/dev/ttyUSB'):
-                continue
-
-            dev = serial.Serial(d, 9600, timeout=1.0)
-            dev.write(b'x*R\r')
-            buf = dev.read(13)
-            if buf.decode().strip().endswith('mbar'):
-                return Manometer(d)
-
-        return None

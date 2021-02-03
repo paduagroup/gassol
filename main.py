@@ -4,7 +4,7 @@ import sys
 import argparse
 from PyQt5 import QtWidgets
 from qtgassol.ui import MainUI
-from qtgassol.device import Thermometer, Manometer, DummyT, DummyP, DummyFile, DeviceDetector
+from qtgassol.device import Thermometer, Manometer, DummyT, DummyP, DummyFile
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-t', '--temp', type=str, default='auto', help='Device for thermometer.'
@@ -24,7 +24,7 @@ opt = parser.parse_args()
 
 if __name__ == '__main__':
     if opt.temp == 'auto':
-        temp = DeviceDetector.detect_thermometer()
+        temp = Thermometer.detect()
         if temp is None:
             print('ERROR: Thermometer not detected. Try again or specify the device.')
             sys.exit(1)
@@ -38,7 +38,7 @@ if __name__ == '__main__':
         temp = DummyFile(opt.temp, -2)
 
     if opt.press == 'auto':
-        press = DeviceDetector.detect_manometer()
+        press = Manometer.detect()
         if press is None:
             print('ERROR: Manometer not detected. Try again or specify the device.')
             sys.exit(1)

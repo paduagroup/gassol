@@ -21,18 +21,26 @@ class MainUI(QtWidgets.QMainWindow):
         self.setCentralWidget(self.widget)
 
         # widgets
-        self.lab_file = QtWidgets.QLabel('Filename')
+        self.lab_file = QtWidgets.QLabel('Log file')
         self.inp_file = QtWidgets.QLineEdit(output)
         self.btn_start = QtWidgets.QPushButton('Start')
         self.btn_pause = QtWidgets.QPushButton('Pause')
+        self.btn_pause.setDisabled(True)
         self.lab_interval = QtWidgets.QLabel('Interval (s)')
         self.inp_interval = QtWidgets.QLineEdit(str(interval))
-        self.btn_interval = QtWidgets.QPushButton('Update interval')
+        self.btn_interval = QtWidgets.QPushButton('Update')
         self.text = QtWidgets.QTextEdit()
         self.text.setText('%-20s %10s %10s' % ('# Date Time', 'T(C)', 'P(mPa)'))
 
+        self.lab_average = QtWidgets.QLabel('Averages for temperature and pressure')
         self.text_t = QtWidgets.QLineEdit()
         self.text_p = QtWidgets.QLineEdit()
+
+        self.lab_temp = QtWidgets.QLabel('Target temperature (C)')
+        self.inp_temp = QtWidgets.QLineEdit('To be implemented')
+        self.btn_temp = QtWidgets.QPushButton('Update')
+        self.inp_temp.setDisabled(True)
+        self.btn_temp.setDisabled(True)
 
         # plots
         self.plt_widget = pg.GraphicsLayoutWidget()
@@ -59,23 +67,40 @@ class MainUI(QtWidgets.QMainWindow):
 
         # layout
         layout = QtWidgets.QHBoxLayout()
+        self.widget.setLayout(layout)
+
         l_left = QtWidgets.QVBoxLayout()
         layout.addLayout(l_left, stretch=0)
         layout.addWidget(self.plt_widget, stretch=1)
 
-        l_left.addWidget(self.lab_file)
-        l_left.addWidget(self.inp_file)
-        l_left.addWidget(self.btn_start)
-        l_left.addWidget(self.btn_pause)
-        l_left.addWidget(self.lab_interval)
-        l_left.addWidget(self.inp_interval)
-        l_left.addWidget(self.btn_interval)
+        l = QtWidgets.QHBoxLayout()
+        l.addWidget(self.lab_file)
+        l.addWidget(self.inp_file)
+        l_left.addLayout(l)
+
+        l = QtWidgets.QHBoxLayout()
+        l.addWidget(self.btn_start)
+        l.addWidget(self.btn_pause)
+        l_left.addLayout(l)
+
+        l = QtWidgets.QHBoxLayout()
+        l.addWidget(self.lab_interval)
+        l.addWidget(self.inp_interval)
+        l.addWidget(self.btn_interval)
+        l_left.addLayout(l)
+
         l_left.addWidget(self.text)
         self.text.setMinimumWidth(350)
+
+        l = QtWidgets.QHBoxLayout()
+        l.addWidget(self.lab_temp)
+        l.addWidget(self.inp_temp)
+        l.addWidget(self.btn_temp)
+        l_left.addLayout(l)
+
+        l_left.addWidget(self.lab_average)
         l_left.addWidget(self.text_t)
         l_left.addWidget(self.text_p)
-
-        self.widget.setLayout(layout)
 
         # data
         self.time_list = []
@@ -95,6 +120,7 @@ class MainUI(QtWidgets.QMainWindow):
         self.btn_start.clicked.connect(self.start)
         self.btn_pause.clicked.connect(self.pause)
         self.btn_interval.clicked.connect(self.set_interval)
+        self.btn_temp.clicked.connect(self.set_temperature)
         self.region.sigRegionChangeFinished.connect(self.calc_average)
 
     def step(self):
@@ -166,6 +192,17 @@ class MainUI(QtWidgets.QMainWindow):
             self.timer.setInterval(interval * 1000)
             return True
 
+    def set_temperature(self):
+        '''
+        TODO
+        '''
+        try:
+            temp = float(self.inp_temp.text())
+        except ValueError:
+            return False
+        else:
+            return True
+
     def start(self):
         if self._is_running:
             return
@@ -183,6 +220,9 @@ class MainUI(QtWidgets.QMainWindow):
         self.timer.start()
         self._is_running = True
 
+        self.btn_start.setDisabled(True)
+        self.btn_pause.setDisabled(False)
+
     def pause(self):
         '''
         Pause and close the output file
@@ -193,6 +233,9 @@ class MainUI(QtWidgets.QMainWindow):
         self.timer.stop()
         self._is_running = False
         self._file.close()
+
+        self.btn_start.setDisabled(False)
+        self.btn_pause.setDisabled(True)
 
     def closeEvent(self, event: QtGui.QCloseEvent) -> None:
         '''

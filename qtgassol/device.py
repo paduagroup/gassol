@@ -1,4 +1,6 @@
+import time
 import serial
+import serial.tools.list_ports
 import numpy as np
 from datetime import datetime
 
@@ -8,19 +10,16 @@ class Device(object):
 
     def __init__(self, name=None, port=None):
         self.name = name or 'Device'
-        if port is None:
-            self.port = None
-        else:
-            self.port = serial.Serial(port, 9600, timeout=1.0)
+        self.port = serial.Serial(port, 9600, timeout=0)
 
     def __str__(self):
-        return (self.name + ': ' + str(self.port))
+        return ('%s : %s' % (self.name, self.port))
 
     def read(self):
         '''
         Return -1 if there is error
         '''
-        return -1
+        raise NotImplementedError('This method should be implemented by inheritors')
 
 
 class Thermometer(Device):
@@ -29,23 +28,64 @@ class Thermometer(Device):
     def __init__(self, port):
         super().__init__('Thermometer', port)
 
-        self.port.write(b'T\r')
+        # set unit to C
+        self.port.write(b'U=C\r')
+        # disable timestamp
+        self.port.write(b'ST=OFF\r')
+        # disable data auto transmission
+        self.port.write(b'SA=0\r')
 
-    def read(self):
-        self.port.write(b'T\r')
+        # clean buffer. It can take a while for data been fully transmitted
+        time.sleep(1.0)
         self.port.reset_input_buffer()
-        buf = self.port.read(16)
-        print(buf)
 
-        datastr = buf.decode()
-        if len(datastr):
+    def read(self, timeout=1.0, debug=False):
+        self.port.reset_input_buffer()
+        self.port.write(b'T\r')
+
+        # retrieve data from serial port
+        # b'T\r\nt:   32.728 C\r\n'
+        current_time = time.time()
+        buf = b''
+        while True:
+            if time.time() - current_time > timeout:
+                if debug:
+                    print('ERROR: timeout exceeded:', buf)
+                return -1
+
+            time.sleep(0.1)
+
+            buf += self.port.read(100)  # read up to 100 bytes
+
+            if buf.endswith(b'C\r\n'):
+                break
+
+        if debug:
+            print(buf)
+
+        try:
+            val = float(buf.decode().split()[-2])
+        except:
+            return -1
+
+        return val
+
+    @staticmethod
+    def detect():
+        devices = [p.device for p in serial.tools.list_ports.comports()]
+        for d in devices:
+            if not d.startswith('/dev/ttyUSB'):
+                continue
+
             try:
-                val = float(datastr.split(':')[1].strip().split()[0])
-                return val
+                dev = Thermometer(d)
             except:
-                pass
+                continue
 
-        return -1
+            if dev.read() != -1:
+                return dev
+
+        return None
 
 
 class Manometer(Device):
@@ -53,28 +93,67 @@ class Manometer(Device):
 
     def __init__(self, port):
         super().__init__('Manometer', port)
-        self.port = serial.Serial(port, 9600, timeout=1.0)
 
-        self.port.write(b'xQ,2\r')  # speed 2: 16000 cycles 1.0 s
-        #       3:  8000 cycles 0.5 s
-        self.port.write(b'xU,0\r')  # units: mbar
-        self.port.write(b'x*A,1.0\r')  # send value every 1.0 s
+        # speed 2: 16000 cycles 1.0 s
+        self.port.write(b'*Q,2\r')
+        # unit: mbar
+        self.port.write(b'*U,0\r')
+        # data auto transmission cannot be disabled for manometer in direct mode
+        # set its interval to 9999 seconds, so it won't interfere with read() too much
+        # a leading char (- or whatever) means with unit
+        self.port.write(b'-*A,9999.0\r')
 
-    def read(self):
-        self.port.write(b'-*G\r')
+        # clean buffer. It can take a while for data been fully transmitted
+        time.sleep(1.0)
         self.port.reset_input_buffer()
-        buf = self.port.read(13)
-        print(buf)
 
-        datastr = buf.decode()
-        if len(datastr):
+    def read(self, timeout=1.0, debug=False):
+        self.port.reset_input_buffer()
+        self.port.write(b'-*G\r')
+
+        # retrieve data from serial port
+        # b'962.43 mbar\r\n'
+        current_time = time.time()
+        buf = b''
+        while True:
+            if time.time() - current_time > timeout:
+                if debug:
+                    print('ERROR: timeout exceeded:', buf)
+                return -1
+
+            time.sleep(0.1)
+
+            buf += self.port.read(100)  # read up to 100 bytes
+
+            if buf.endswith(b'mbar\r\n'):
+                break
+
+        if debug:
+            print(buf)
+
+        try:
+            val = float(buf.decode().split()[-2])
+        except:
+            return -1
+
+        return val
+
+    @staticmethod
+    def detect():
+        devices = [p.device for p in serial.tools.list_ports.comports()]
+        for d in devices:
+            if not d.startswith('/dev/ttyUSB'):
+                continue
+
             try:
-                val = float(datastr.split()[0])
-                return val
+                dev = Manometer(d)
             except:
-                pass
+                continue
 
-        return -1
+            if dev.read() != -1:
+                return dev
+
+        return None
 
 
 class DummyT(Device):
@@ -102,7 +181,7 @@ class DummyFile(Device):
     '''
 
     def __init__(self, filename, column):
-        super().__init__('File')
+        super().__init__('Dummy File')
         with open(filename) as f:
             self.lines = f.read().splitlines()
 

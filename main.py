@@ -6,7 +6,7 @@ from PyQt5 import QtWidgets
 from qtgassol.ui import MainUI
 from qtgassol.device import Thermometer, Manometer, DummyT, DummyP, DummyFile
 
-parser = argparse.ArgumentParser()
+parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('-t', '--temp', type=str, default='auto', help='Device for thermometer.'
                                                                    'auto means detect the thermometer automatically.'
                                                                    'dummy means use randomly generated temperature data.'

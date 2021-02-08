@@ -1,3 +1,4 @@
+import time
 import serial
 import serial.tools.list_ports
 import numpy as np
@@ -9,8 +10,7 @@ class Device(object):
 
     def __init__(self, name=None, port=None):
         self.name = name or 'Device'
-        # TODO timeout of 1s may not be reasonable
-        self.port = serial.Serial(port, 9600, timeout=1.0)
+        self.port = serial.Serial(port, 9600, timeout=0)
 
     def __str__(self):
         return ('%s : %s' % (self.name, self.port))
@@ -28,29 +28,47 @@ class Thermometer(Device):
     def __init__(self, port):
         super().__init__('Thermometer', port)
 
-    def read(self):
-        '''
-        TODO
-        use in_waiting to check the available data in buffer
-        read it until data are completely transmitted
-        '''
-        self.port.write(b'T\r')
-        self.port.reset_input_buffer()
-        buf = self.port.read(16)
-        print(buf)
+        # set unit to C
+        self.port.write(b'U=C\r')
+        # disable timestamp
+        self.port.write(b'ST=OFF\r')
+        # disable data auto transmission
+        self.port.write(b'SA=0\r')
 
-        # make sure the format is correct
-        # b'T\r\nt:   32.728 C'
-        words = buf.decode().split()
-        if len(words) < 2 or words[-1] != 'C':
-            return -1
+        # clean buffer. It can take a while for data been fully transmitted
+        time.sleep(1.0)
+        self.port.reset_input_buffer()
+
+    def read(self, timeout=1.0, debug=False):
+        self.port.reset_input_buffer()
+        self.port.write(b'T\r')
+
+        # retrieve data from serial port
+        # b'T\r\nt:   32.728 C\r\n'
+        current_time = time.time()
+        buf = b''
+        while True:
+            if time.time() - current_time > timeout:
+                if debug:
+                    print('ERROR: timeout exceeded:', buf)
+                return -1
+
+            time.sleep(0.1)
+
+            buf += self.port.read(100)  # read up to 100 bytes
+
+            if buf.endswith(b'C\r\n'):
+                break
+
+        if debug:
+            print(buf)
 
         try:
-            val = float(words[-2])
+            val = float(buf.decode().split()[-2])
         except:
             return -1
-        else:
-            return val
+
+        return val
 
     @staticmethod
     def detect():
@@ -77,32 +95,48 @@ class Manometer(Device):
         super().__init__('Manometer', port)
 
         # speed 2: 16000 cycles 1.0 s
-        # speed 3:  8000 cycles 0.5 s
-        # self.port.write(b'xQ,2\r')
-        # self.port.write(b'xU,0\r')  # unit: mbar
-        # self.port.write(b'x*A,1.0\r')  # send value every 1.0 s, with units
         self.port.write(b'*Q,2\r')
-        self.port.write(b'*U,0\r')  # unit: mbar
-        self.port.write(b'-*A,1.0\r')  # send value every 1.0 s, with units
+        # unit: mbar
+        self.port.write(b'*U,0\r')
+        # data auto transmission cannot be disabled for manometer in direct mode
+        # set its interval to 9999 seconds, so it won't interfere with read() too much
+        # a leading char (- or whatever) means with unit
+        self.port.write(b'-*A,9999.0\r')
 
-    def read(self):
-        self.port.write(b'-*G\r')
+        # clean buffer. It can take a while for data been fully transmitted
+        time.sleep(1.0)
         self.port.reset_input_buffer()
-        buf = self.port.read(13)
-        print(buf)
 
-        # make sure the format is correct
+    def read(self, timeout=1.0, debug=False):
+        self.port.reset_input_buffer()
+        self.port.write(b'-*G\r')
+
+        # retrieve data from serial port
         # b'962.43 mbar\r\n'
-        words = buf.decode().split()
-        if len(words) < 2 or words[-1] != 'mbar':
-            return -1
+        current_time = time.time()
+        buf = b''
+        while True:
+            if time.time() - current_time > timeout:
+                if debug:
+                    print('ERROR: timeout exceeded:', buf)
+                return -1
+
+            time.sleep(0.1)
+
+            buf += self.port.read(100)  # read up to 100 bytes
+
+            if buf.endswith(b'mbar\r\n'):
+                break
+
+        if debug:
+            print(buf)
 
         try:
-            val = float(words[-2])
+            val = float(buf.decode().split()[-2])
         except:
             return -1
-        else:
-            return val
+
+        return val
 
     @staticmethod
     def detect():

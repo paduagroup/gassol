@@ -78,9 +78,12 @@ class Manometer(Device):
 
         # speed 2: 16000 cycles 1.0 s
         # speed 3:  8000 cycles 0.5 s
-        self.port.write(b'xQ,2\r')
-        self.port.write(b'xU,0\r')  # unit: mbar
-        self.port.write(b'x*A,1.0\r')  # send value every 1.0 s
+        # self.port.write(b'xQ,2\r')
+        # self.port.write(b'xU,0\r')  # unit: mbar
+        # self.port.write(b'x*A,1.0\r')  # send value every 1.0 s, with units
+        self.port.write(b'*Q,2\r')
+        self.port.write(b'*U,0\r')  # unit: mbar
+        self.port.write(b'-*A,1.0\r')  # send value every 1.0 s, with units
 
     def read(self):
         self.port.write(b'-*G\r')

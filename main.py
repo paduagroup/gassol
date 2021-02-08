@@ -19,6 +19,7 @@ parser.add_argument('-o', '--output', type=str, default='output.txt', help='Outp
                                                                            'Can also be specified from GUI.')
 parser.add_argument('--dt', type=float, default=3.0, help='Time interval for reading data.'
                                                           'Can also be specified from GUI.')
+parser.add_argument('--cli', type=bool, action='store_true', help='Do not use QT GUI.')
 
 opt = parser.parse_args()
 

@@ -1,13 +1,13 @@
 import pytest
-from qtgassol.device import Thermometer, Manometer
+from qtgassol.device import FlukeThermometer, GeManometer
 
 if __name__ == '__main__':
-    temp = Thermometer.detect()
+    temp = FlukeThermometer.detect()
     if temp is not None:
         print(temp)
         print(temp.read())
 
-    press = Manometer.detect()
+    press = GeManometer.detect()
     if press is not None:
         print(press)
         print(press.read())

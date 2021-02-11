@@ -8,40 +8,47 @@ from datetime import datetime
 class Device(object):
     '''A device'''
 
-    def __init__(self, name=None, port=None):
-        self.name = name or 'Device'
-        self.port = serial.Serial(port, 9600, timeout=0)
+    def __init__(self, port=None):
+        self.port = port
+        if port is not None:
+            self.serial = serial.Serial(port, 9600, timeout=0)
 
     def __str__(self):
-        return ('%s : %s' % (self.name, self.port))
+        return ('<%s: %s>' % (self.__class__.__name__, self.port))
 
-    def read(self):
+    def read(self, **kwargs):
         '''
         Return -1 if there is error
         '''
-        raise NotImplementedError('This method should be implemented by inheritors')
+        raise NotImplementedError('Method not supported')
+
+    def set(self, val, **kwargs):
+        '''
+        Return -1 if there is error
+        '''
+        raise NotImplementedError('Method not supported')
 
 
-class Thermometer(Device):
+class FlukeThermometer(Device):
     '''Thermometer'''
 
     def __init__(self, port):
-        super().__init__('Thermometer', port)
+        super().__init__(port)
 
         # set unit to C
-        self.port.write(b'U=C\r')
+        self.serial.write(b'U=C\r')
         # disable timestamp
-        self.port.write(b'ST=OFF\r')
+        self.serial.write(b'ST=OFF\r')
         # disable data auto transmission
-        self.port.write(b'SA=0\r')
+        self.serial.write(b'SA=0\r')
 
         # clean buffer. It can take a while for data been fully transmitted
         time.sleep(1.0)
-        self.port.reset_input_buffer()
+        self.serial.reset_input_buffer()
 
     def read(self, timeout=1.0, debug=False):
-        self.port.reset_input_buffer()
-        self.port.write(b'T\r')
+        self.serial.reset_input_buffer()
+        self.serial.write(b'T\r')
 
         # retrieve data from serial port
         # b'T\r\nt:   32.728 C\r\n'
@@ -55,7 +62,7 @@ class Thermometer(Device):
 
             time.sleep(0.1)
 
-            buf += self.port.read(100)  # read up to 100 bytes
+            buf += self.serial.read(100)  # read up to 100 bytes
 
             if buf.endswith(b'C\r\n'):
                 break
@@ -78,7 +85,7 @@ class Thermometer(Device):
                 continue
 
             try:
-                dev = Thermometer(d)
+                dev = FlukeThermometer(d)
             except:
                 continue
 
@@ -88,28 +95,28 @@ class Thermometer(Device):
         return None
 
 
-class Manometer(Device):
+class GeManometer(Device):
     '''Pressure transducer'''
 
     def __init__(self, port):
-        super().__init__('Manometer', port)
+        super().__init__(port)
 
         # speed 2: 16000 cycles 1.0 s
-        self.port.write(b'*Q,2\r')
+        self.serial.write(b'*Q,2\r')
         # unit: mbar
-        self.port.write(b'*U,0\r')
+        self.serial.write(b'*U,0\r')
         # data auto transmission cannot be disabled for manometer in direct mode
         # set its interval to 9999 seconds, so it won't interfere with read() too much
         # a leading char (- or whatever) means with unit
-        self.port.write(b'-*A,9999.0\r')
+        self.serial.write(b'-*A,9999.0\r')
 
         # clean buffer. It can take a while for data been fully transmitted
         time.sleep(1.0)
-        self.port.reset_input_buffer()
+        self.serial.reset_input_buffer()
 
     def read(self, timeout=1.0, debug=False):
-        self.port.reset_input_buffer()
-        self.port.write(b'-*G\r')
+        self.serial.reset_input_buffer()
+        self.serial.write(b'-*G\r')
 
         # retrieve data from serial port
         # b'962.43 mbar\r\n'
@@ -123,7 +130,7 @@ class Manometer(Device):
 
             time.sleep(0.1)
 
-            buf += self.port.read(100)  # read up to 100 bytes
+            buf += self.serial.read(100)  # read up to 100 bytes
 
             if buf.endswith(b'mbar\r\n'):
                 break
@@ -146,7 +153,81 @@ class Manometer(Device):
                 continue
 
             try:
-                dev = Manometer(d)
+                dev = GeManometer(d)
+            except:
+                continue
+
+            if dev.read() != -1:
+                return dev
+
+        return None
+
+
+class HuberThermostat(Device):
+    '''
+    Huber Thermostat
+    TODO to be implemented
+    '''
+
+    def __init__(self, port):
+        super().__init__(port)
+
+        # clean buffer. It can take a while for data been fully transmitted
+        time.sleep(1.0)
+        self.serial.reset_input_buffer()
+
+    def read(self):
+        return -1
+
+    def set(self, val, timeout=1.0, debug=False):
+        pass
+
+    @staticmethod
+    def detect():
+        devices = [p.device for p in serial.tools.list_ports.comports()]
+        for d in devices:
+            if not d.startswith('/dev/ttyUSB'):
+                continue
+
+            try:
+                dev = JulaboThermostat(d)
+            except:
+                continue
+
+            if dev.read() != -1:
+                return dev
+
+        return None
+
+
+class JulaboThermostat(Device):
+    '''
+    Julabo Thermostat
+    TODO to be implemented
+    '''
+
+    def __init__(self, port):
+        super().__init__(port)
+
+        # clean buffer. It can take a while for data been fully transmitted
+        time.sleep(1.0)
+        self.serial.reset_input_buffer()
+
+    def read(self):
+        return -1
+
+    def set(self, val, timeout=1.0, debug=False):
+        pass
+
+    @staticmethod
+    def detect():
+        devices = [p.device for p in serial.tools.list_ports.comports()]
+        for d in devices:
+            if not d.startswith('/dev/ttyUSB'):
+                continue
+
+            try:
+                dev = JulaboThermostat(d)
             except:
                 continue
 
@@ -158,7 +239,7 @@ class Manometer(Device):
 
 class DummyT(Device):
     def __init__(self):
-        super().__init__('Dummy T')
+        super().__init__()
 
     def read(self):
         return 25.0 + np.random.random_sample() - 0.5
@@ -166,7 +247,7 @@ class DummyT(Device):
 
 class DummyP(Device):
     def __init__(self):
-        super().__init__('Dummy P')
+        super().__init__()
         self.t0 = datetime.now().timestamp()
 
     def read(self):
@@ -181,7 +262,7 @@ class DummyFile(Device):
     '''
 
     def __init__(self, filename, column):
-        super().__init__('Dummy File')
+        super().__init__()
         with open(filename) as f:
             self.lines = f.read().splitlines()
 

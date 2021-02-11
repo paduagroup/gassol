@@ -7,14 +7,15 @@ from .timeseries import detect_anomaly_t, detect_anomaly_p
 
 
 class MainUI(QtWidgets.QMainWindow):
-    def __init__(self, temp, pres, output, interval):
+    def __init__(self, thermometer, manometer, thermostat, output, interval):
         super().__init__()
         self.setWindowTitle('GasSol')
         self.resize(1000, 1000)
 
         # devices
-        self.temp = temp
-        self.pres = pres
+        self.thermometer = thermometer
+        self.manometer = manometer
+        self.thermostat = thermostat
 
         # top-level widget
         self.widget = QtWidgets.QWidget()
@@ -36,34 +37,38 @@ class MainUI(QtWidgets.QMainWindow):
         self.text_t = QtWidgets.QLineEdit()
         self.text_p = QtWidgets.QLineEdit()
 
-        self.lab_temp = QtWidgets.QLabel('Target temperature (C)')
-        self.inp_temp = QtWidgets.QLineEdit('To be implemented')
-        self.btn_temp = QtWidgets.QPushButton('Update')
-        self.inp_temp.setDisabled(True)
-        self.btn_temp.setDisabled(True)
+        self.lab_thermo = QtWidgets.QLabel('Thermostat (C)')
+        self.inp_thermo = QtWidgets.QLineEdit()
+        self.btn_thermo = QtWidgets.QPushButton('Update')
+        if self.thermostat is None:
+            self.inp_thermo.setDisabled(True)
+            self.btn_thermo.setDisabled(True)
+        else:
+            self.inp_thermo.setText(str(self.thermostat.read()))
 
         # plots
         self.plt_widget = pg.GraphicsLayoutWidget()
-        self.plt1 = self.plt_widget.addPlot()
-        self.plt1.setLabel('left', 'T / C')
-        self.plt1.setAxisItems({'bottom': pg.DateAxisItem()})
-        self.plt1.showGrid(x=True, y=True, alpha=0.5)
+        self.plt_t = self.plt_widget.addPlot()
+        self.plt_t.setLabel('left', 'T / C')
+        self.plt_t.setAxisItems({'bottom': pg.DateAxisItem()})
+        self.plt_t.showGrid(x=True, y=True, alpha=0.5)
         self.plt_widget.nextRow()
-        self.plt2 = self.plt_widget.addPlot()
-        self.plt2.setLabel('left', 'P / mPa')
-        self.plt2.setAxisItems({'bottom': pg.DateAxisItem()})
-        self.plt2.setXLink(self.plt1)  # share X axis scales
-        self.plt2.showGrid(x=True, y=True, alpha=0.5)
-        self.curve1 = self.plt1.plot(symbolBrush=(0, 0, 255), symbolSize=8)
-        self.curve2 = self.plt2.plot(symbolBrush=(0, 0, 255), symbolSize=8)
-        self.curve1_anomaly = self.plt1.scatterPlot(symbolBrush=(255, 0, 0), symbolSize=16)
-        self.curve2_anomaly = self.plt2.scatterPlot(symbolBrush=(255, 0, 0), symbolSize=16)
+        self.plt_p = self.plt_widget.addPlot()
+        self.plt_p.setLabel('left', 'P / mPa')
+        self.plt_p.setAxisItems({'bottom': pg.DateAxisItem()})
+        self.plt_p.setXLink(self.plt_t)  # share X axis scales
+        self.plt_p.showGrid(x=True, y=True, alpha=0.5)
+        self.curve_t = self.plt_t.plot(symbolBrush=(0, 0, 255), symbolSize=8)
+        self.curve_p = self.plt_p.plot(symbolBrush=(0, 0, 255), symbolSize=8)
+        self.curve_t_anomaly = self.plt_t.scatterPlot(symbolBrush=(255, 0, 0), symbolSize=16)
+        self.curve_p_anomaly = self.plt_p.scatterPlot(symbolBrush=(255, 0, 0), symbolSize=16)
+        self.curve_thermostat = self.plt_t.plot(symbolBrush=(0, 255, 0), symbolSize=8)
 
         # select region in plot
         timestamp = time.time()
         self.region = pg.LinearRegionItem([timestamp, timestamp + 30],
                                           movable=False, span=[0.0, 0.2], swapMode='block')
-        self.plt1.addItem(self.region)
+        self.plt_t.addItem(self.region)
 
         # layout
         layout = QtWidgets.QHBoxLayout()
@@ -93,9 +98,9 @@ class MainUI(QtWidgets.QMainWindow):
         self.text.setMinimumWidth(350)
 
         l = QtWidgets.QHBoxLayout()
-        l.addWidget(self.lab_temp)
-        l.addWidget(self.inp_temp)
-        l.addWidget(self.btn_temp)
+        l.addWidget(self.lab_thermo)
+        l.addWidget(self.inp_thermo)
+        l.addWidget(self.btn_thermo)
         l_left.addLayout(l)
 
         l_left.addWidget(self.lab_average)
@@ -106,6 +111,7 @@ class MainUI(QtWidgets.QMainWindow):
         self.time_list = []
         self.t_list = []
         self.p_list = []
+        self._t_target_last = None
 
         # timer for update data
         self.timer = QtCore.QTimer(self)
@@ -120,13 +126,13 @@ class MainUI(QtWidgets.QMainWindow):
         self.btn_start.clicked.connect(self.start)
         self.btn_pause.clicked.connect(self.pause)
         self.btn_interval.clicked.connect(self.set_interval)
-        self.btn_temp.clicked.connect(self.set_temperature)
+        self.btn_thermo.clicked.connect(self.set_temperature)
         self.region.sigRegionChangeFinished.connect(self.calc_average)
 
     def step(self):
         timestamp = time.time()
-        t = self.temp.read()
-        p = self.pres.read()
+        t = self.thermometer.read()
+        p = self.manometer.read()
         string = '%-20s %10.3f %10.2f' % (datetime.fromtimestamp(timestamp).strftime('%y-%m-%d %H:%M:%S'), t, p)
         self.text.append(string)
 
@@ -135,11 +141,24 @@ class MainUI(QtWidgets.QMainWindow):
         self.time_list.append(timestamp)
         self.t_list.append(t)
         self.p_list.append(p)
-        self.curve1.setData(self.time_list, self.t_list)
-        self.curve2.setData(self.time_list, self.p_list)
+        self.curve_t.setData(self.time_list, self.t_list)
+        self.curve_p.setData(self.time_list, self.p_list)
 
         self.region.setBounds([self.time_list[0], max(timestamp, self.time_list[0] + 30)])
         self.region.setMovable(True)
+
+        # update thermostat
+        if self.thermostat is not None and self.thermostat.has_preset:
+            t_target = self.thermostat.get_preset()
+            if self._t_target_last is None or abs(self._t_target_last - t_target) > 0.01:
+                self.thermostat.set(t_target)
+                self._t_target_last = t_target
+
+            t_list, temp_list = map(list, zip(*self.thermostat._timestamp_temp))
+            if t_list[-1] < timestamp + 60:
+                t_list.append(timestamp + 60)
+                temp_list.append(temp_list[-1])
+            self.curve_thermostat.setData(t_list, temp_list)
 
     def calc_average(self):
         '''
@@ -158,8 +177,8 @@ class MainUI(QtWidgets.QMainWindow):
         idx_anomaly_p = [i for i in range(2, n - 2) if
                          detect_anomaly_p(p_array[[i - 2, i - 1, i + 1, i + 2]], p_array[i])]
 
-        self.curve1_anomaly.setData(time_array[idx_anomaly_t], t_array[idx_anomaly_t])
-        self.curve2_anomaly.setData(time_array[idx_anomaly_p], p_array[idx_anomaly_p])
+        self.curve_t_anomaly.setData(time_array[idx_anomaly_t], t_array[idx_anomaly_t])
+        self.curve_p_anomaly.setData(time_array[idx_anomaly_p], p_array[idx_anomaly_p])
 
         mask = np.ones(n, np.bool)
         mask[idx_anomaly_t] = 0
@@ -193,15 +212,16 @@ class MainUI(QtWidgets.QMainWindow):
             return True
 
     def set_temperature(self):
-        '''
-        TODO
-        '''
-        try:
-            temp = float(self.inp_temp.text())
-        except ValueError:
+        if self.thermostat is None:
             return False
+
+        str_preset = self.inp_thermo.text().strip()
+        if self.thermostat.preset(str_preset):
+            string = '# Thermostat preset updated: ' + str_preset
         else:
-            return True
+            string = '# Update thermostat preset failed: ' + str_preset
+        self.text.append(string)
+        self._file.write(string + '\n')
 
     def start(self):
         if self._is_running:

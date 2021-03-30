@@ -114,7 +114,7 @@ class GeManometer(Device):
         time.sleep(1.0)
         self.serial.reset_input_buffer()
 
-    def read(self, timeout=1.0, debug=False):
+    def read(self, timeout=2.0, debug=False):
         self.serial.reset_input_buffer()
         self.serial.write(b'-*G\r')
 

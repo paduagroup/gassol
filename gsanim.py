@@ -19,6 +19,7 @@ class device(object):
 
     def measure():
         return 0.0
+    
         
 
 class therm(device):
